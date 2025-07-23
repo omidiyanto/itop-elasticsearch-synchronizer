@@ -55,6 +55,11 @@ type ESTicket struct {
 	TimeToResolveBusinessHr           float64    `json:"time_to_resolve_business_hour"`
 	SLAComplianceResponseBusinessHour string     `json:"sla_compliance_response_bussiness_hour"`
 	SLAComplianceResolveBusinessHour  string     `json:"sla_compliance_resolve_bussiness_hour"`
+
+	TimeToResponse24BH        float64 `json:"time_to_response_24bh"`
+	TimeToResolve24BH         float64 `json:"time_to_resolve_24bh"`
+	SLAComplianceResponse24BH string  `json:"sla_compliance_response_24bh"`
+	SLAComplianceResolve24BH  string  `json:"sla_compliance_resolve_24bh"`
 }
 
 func main() {
@@ -168,6 +173,10 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 	ttrBH := utils.CalculateBusinessHourDuration(t.StartDate, t.ResolutionDate, workStart, workEnd, holidays)
 	ttoBH := utils.CalculateBusinessHourDuration(t.StartDate, t.AssignmentDate, workStart, workEnd, holidays)
 
+	// 24-hour business hour calculation (00:00-23:59)
+	ttr24BH := utils.CalculateBusinessHourDuration(t.StartDate, t.ResolutionDate, "00:00", "23:59", holidays)
+	tto24BH := utils.CalculateBusinessHourDuration(t.StartDate, t.AssignmentDate, "00:00", "23:59", holidays)
+
 	// Ambil SLT dari iTop (cache)
 	slt, _ := itop.GetSLTDeadlineCached(t.Class, t.Priority, t.Service)
 
@@ -215,6 +224,31 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		}
 	} else {
 		slaComplianceResolveBH = ""
+	}
+
+	// Compliance logic (24-hour business hour)
+	var slaComplianceResponse24BH, slaComplianceResolve24BH string
+	if slt.TTO > 0 {
+		if (tto24BH > 0 && tto24BH.Seconds() <= slt.TTO.Seconds()) || (tto24BH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
+			slaComplianceResponse24BH = "comply"
+		} else if tto24BH.Seconds() > 0 {
+			slaComplianceResponse24BH = "violate"
+		} else {
+			slaComplianceResponse24BH = ""
+		}
+	} else {
+		slaComplianceResponse24BH = ""
+	}
+	if slt.TTR > 0 {
+		if (ttr24BH > 0 && ttr24BH.Seconds() <= slt.TTR.Seconds()) || (ttr24BH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
+			slaComplianceResolve24BH = "comply"
+		} else if ttr24BH.Seconds() > 0 {
+			slaComplianceResolve24BH = "violate"
+		} else {
+			slaComplianceResolve24BH = ""
+		}
+	} else {
+		slaComplianceResolve24BH = ""
 	}
 
 	tz := os.Getenv("TIMEZONE")
@@ -269,6 +303,10 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		TimeToResolveBusinessHr:           ttrBH.Seconds(),
 		SLAComplianceResponseBusinessHour: slaComplianceResponseBH,
 		SLAComplianceResolveBusinessHour:  slaComplianceResolveBH,
+		TimeToResponse24BH:                tto24BH.Seconds(),
+		TimeToResolve24BH:                 ttr24BH.Seconds(),
+		SLAComplianceResponse24BH:         slaComplianceResponse24BH,
+		SLAComplianceResolve24BH:          slaComplianceResolve24BH,
 	}
 }
 
