@@ -27,32 +27,34 @@ type ESConfig struct {
 
 // ESTicket is the model for elasticsearch
 type ESTicket struct {
-	ID                       string     `json:"id"`
-	Ref                      string     `json:"ref"`
-	Class                    string     `json:"class"`
-	Title                    string     `json:"title"`
-	Status                   string     `json:"status"`
-	Priority                 string     `json:"priority"`
-	Urgency                  string     `json:"urgency"`
-	Impact                   string     `json:"impact"`
-	ServiceID                string     `json:"service_id"`
-	ServiceName              string     `json:"service_name"`
-	ServiceSubcategoryName   string     `json:"servicesubcategory_name"`
-	AgentID                  string     `json:"agent_id"`
-	Agent                    string     `json:"agent_id_friendlyname"`
-	TeamID                   string     `json:"team_id"`
-	Team                     string     `json:"team_id_friendlyname"`
-	Caller                   string     `json:"caller_id_friendlyname"`
-	Origin                   string     `json:"origin"`
-	StartDate                *time.Time `json:"start_date,omitempty"`
-	AssignmentDate           *time.Time `json:"assignment_date,omitempty"`
-	ResolutionDate           *time.Time `json:"resolution_date,omitempty"`
-	TimeToResponseRaw        float64    `json:"time_to_response_raw"`
-	TimeToResolveRaw         float64    `json:"time_to_resolve_raw"`
-	SLAComplianceResponseRaw string     `json:"sla_compliance_response_raw"`
-	SLAComplianceResolveRaw  string     `json:"sla_compliance_resolve_raw"`
-	TimeToResponseBusinessHr float64    `json:"time_to_response_business_hour"`
-	TimeToResolveBusinessHr  float64    `json:"time_to_resolve_business_hour"`
+	ID                                string     `json:"id"`
+	Ref                               string     `json:"ref"`
+	Class                             string     `json:"class"`
+	Title                             string     `json:"title"`
+	Status                            string     `json:"status"`
+	Priority                          string     `json:"priority"`
+	Urgency                           string     `json:"urgency"`
+	Impact                            string     `json:"impact"`
+	ServiceID                         string     `json:"service_id"`
+	ServiceName                       string     `json:"service_name"`
+	ServiceSubcategoryName            string     `json:"servicesubcategory_name"`
+	AgentID                           string     `json:"agent_id"`
+	Agent                             string     `json:"agent_id_friendlyname"`
+	TeamID                            string     `json:"team_id"`
+	Team                              string     `json:"team_id_friendlyname"`
+	Caller                            string     `json:"caller_id_friendlyname"`
+	Origin                            string     `json:"origin"`
+	StartDate                         *time.Time `json:"start_date,omitempty"`
+	AssignmentDate                    *time.Time `json:"assignment_date,omitempty"`
+	ResolutionDate                    *time.Time `json:"resolution_date,omitempty"`
+	TimeToResponseRaw                 float64    `json:"time_to_response_raw"`
+	TimeToResolveRaw                  float64    `json:"time_to_resolve_raw"`
+	SLAComplianceResponseRaw          string     `json:"sla_compliance_response_raw"`
+	SLAComplianceResolveRaw           string     `json:"sla_compliance_resolve_raw"`
+	TimeToResponseBusinessHr          float64    `json:"time_to_response_business_hour"`
+	TimeToResolveBusinessHr           float64    `json:"time_to_resolve_business_hour"`
+	SLAComplianceResponseBusinessHour string     `json:"sla_compliance_response_bussiness_hour"`
+	SLAComplianceResolveBusinessHour  string     `json:"sla_compliance_resolve_bussiness_hour"`
 }
 
 func main() {
@@ -69,6 +71,9 @@ func main() {
 	if esConf.URL == "" || esConf.Index == "" {
 		log.Fatal("Missing ELASTIC_URL or ELASTIC_INDEX env var")
 	}
+
+	// Sync holidays from iTop to file in background (periodic, setiap 10 detik)
+	go itop.SyncHolidaysToFile("holidays.txt", 10*time.Second)
 
 	go syncLoop(esConf)
 	select {} // block forever
@@ -163,6 +168,55 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 	ttrBH := utils.CalculateBusinessHourDuration(t.StartDate, t.ResolutionDate, workStart, workEnd, holidays)
 	ttoBH := utils.CalculateBusinessHourDuration(t.StartDate, t.AssignmentDate, workStart, workEnd, holidays)
 
+	// Ambil SLT dari iTop (cache)
+	slt, _ := itop.GetSLTDeadlineCached(t.Class, t.Priority, t.Service)
+
+	// Compliance logic (RAW)
+	var slaComplianceResponseRaw, slaComplianceResolveRaw string
+	if slt.TTO > 0 && ttoRaw > 0 {
+		if ttoRaw <= slt.TTO.Seconds() {
+			slaComplianceResponseRaw = "comply"
+		} else {
+			slaComplianceResponseRaw = "violate"
+		}
+	} else {
+		slaComplianceResponseRaw = ""
+	}
+	if slt.TTR > 0 && ttrRaw > 0 {
+		if ttrRaw <= slt.TTR.Seconds() {
+			slaComplianceResolveRaw = "comply"
+		} else {
+			slaComplianceResolveRaw = "violate"
+		}
+	} else {
+		slaComplianceResolveRaw = ""
+	}
+
+	// Compliance logic (Business Hour)
+	var slaComplianceResponseBH, slaComplianceResolveBH string
+	if slt.TTO > 0 {
+		if (ttoBH > 0 && ttoBH.Seconds() <= slt.TTO.Seconds()) || (ttoBH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
+			slaComplianceResponseBH = "comply"
+		} else if ttoBH.Seconds() > 0 {
+			slaComplianceResponseBH = "violate"
+		} else {
+			slaComplianceResponseBH = ""
+		}
+	} else {
+		slaComplianceResponseBH = ""
+	}
+	if slt.TTR > 0 {
+		if (ttrBH > 0 && ttrBH.Seconds() <= slt.TTR.Seconds()) || (ttrBH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
+			slaComplianceResolveBH = "comply"
+		} else if ttrBH.Seconds() > 0 {
+			slaComplianceResolveBH = "violate"
+		} else {
+			slaComplianceResolveBH = ""
+		}
+	} else {
+		slaComplianceResolveBH = ""
+	}
+
 	tz := os.Getenv("TIMEZONE")
 	if tz == "" {
 		tz = "Asia/Jakarta"
@@ -187,32 +241,34 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 	}
 
 	return ESTicket{
-		ID:                       t.ID,
-		Ref:                      t.Ref,
-		Class:                    t.Class,
-		Title:                    t.Title,
-		Status:                   t.Status,
-		Priority:                 priorityLabel(t.Priority),
-		Urgency:                  urgencyLabel(t.Urgency),
-		Impact:                   impactLabel(t.Impact),
-		ServiceID:                t.ServiceID,
-		ServiceName:              t.Service,
-		ServiceSubcategoryName:   t.ServiceSubcategory,
-		AgentID:                  t.AgentID,
-		Agent:                    t.Agent,
-		TeamID:                   t.TeamID,
-		Team:                     t.Team,
-		Caller:                   t.Caller,
-		Origin:                   t.Origin,
-		StartDate:                startDatePtr,
-		AssignmentDate:           assignmentDatePtr,
-		ResolutionDate:           resolutionDatePtr,
-		TimeToResponseRaw:        ttoRaw,
-		TimeToResolveRaw:         ttrRaw,
-		SLAComplianceResponseRaw: t.SLATTOPassed,
-		SLAComplianceResolveRaw:  t.SLATTRPassed,
-		TimeToResponseBusinessHr: ttoBH.Seconds(),
-		TimeToResolveBusinessHr:  ttrBH.Seconds(),
+		ID:                                t.ID,
+		Ref:                               t.Ref,
+		Class:                             t.Class,
+		Title:                             t.Title,
+		Status:                            t.Status,
+		Priority:                          priorityLabel(t.Priority),
+		Urgency:                           urgencyLabel(t.Urgency),
+		Impact:                            impactLabel(t.Impact),
+		ServiceID:                         t.ServiceID,
+		ServiceName:                       t.Service,
+		ServiceSubcategoryName:            t.ServiceSubcategory,
+		AgentID:                           t.AgentID,
+		Agent:                             t.Agent,
+		TeamID:                            t.TeamID,
+		Team:                              t.Team,
+		Caller:                            t.Caller,
+		Origin:                            t.Origin,
+		StartDate:                         startDatePtr,
+		AssignmentDate:                    assignmentDatePtr,
+		ResolutionDate:                    resolutionDatePtr,
+		TimeToResponseRaw:                 ttoRaw,
+		TimeToResolveRaw:                  ttrRaw,
+		SLAComplianceResponseRaw:          slaComplianceResponseRaw,
+		SLAComplianceResolveRaw:           slaComplianceResolveRaw,
+		TimeToResponseBusinessHr:          ttoBH.Seconds(),
+		TimeToResolveBusinessHr:           ttrBH.Seconds(),
+		SLAComplianceResponseBusinessHour: slaComplianceResponseBH,
+		SLAComplianceResolveBusinessHour:  slaComplianceResolveBH,
 	}
 }
 
