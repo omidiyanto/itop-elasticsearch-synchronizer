@@ -186,7 +186,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		if ttoRaw <= slt.TTO.Seconds() {
 			slaComplianceResponseRaw = "comply"
 		} else {
-			slaComplianceResponseRaw = "violate"
+			slaComplianceResponseRaw = "overdue"
 		}
 	} else {
 		slaComplianceResponseRaw = ""
@@ -195,7 +195,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		if ttrRaw <= slt.TTR.Seconds() {
 			slaComplianceResolveRaw = "comply"
 		} else {
-			slaComplianceResolveRaw = "violate"
+			slaComplianceResolveRaw = "overdue"
 		}
 	} else {
 		slaComplianceResolveRaw = ""
@@ -207,7 +207,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		if (ttoBH > 0 && ttoBH.Seconds() <= slt.TTO.Seconds()) || (ttoBH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
 			slaComplianceResponseBH = "comply"
 		} else if ttoBH.Seconds() > 0 {
-			slaComplianceResponseBH = "violate"
+			slaComplianceResponseBH = "overdue"
 		} else {
 			slaComplianceResponseBH = ""
 		}
@@ -218,7 +218,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		if (ttrBH > 0 && ttrBH.Seconds() <= slt.TTR.Seconds()) || (ttrBH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
 			slaComplianceResolveBH = "comply"
 		} else if ttrBH.Seconds() > 0 {
-			slaComplianceResolveBH = "violate"
+			slaComplianceResolveBH = "overdue"
 		} else {
 			slaComplianceResolveBH = ""
 		}
@@ -232,7 +232,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		if (tto24BH > 0 && tto24BH.Seconds() <= slt.TTO.Seconds()) || (tto24BH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
 			slaComplianceResponse24BH = "comply"
 		} else if tto24BH.Seconds() > 0 {
-			slaComplianceResponse24BH = "violate"
+			slaComplianceResponse24BH = "overdue"
 		} else {
 			slaComplianceResponse24BH = ""
 		}
@@ -243,7 +243,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		if (ttr24BH > 0 && ttr24BH.Seconds() <= slt.TTR.Seconds()) || (ttr24BH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
 			slaComplianceResolve24BH = "comply"
 		} else if ttr24BH.Seconds() > 0 {
-			slaComplianceResolve24BH = "violate"
+			slaComplianceResolve24BH = "overdue"
 		} else {
 			slaComplianceResolve24BH = ""
 		}
