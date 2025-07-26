@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type ITopClient struct {
@@ -36,7 +37,11 @@ func (c *ITopClient) Post(operation string, params map[string]interface{}) ([]by
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-	client := &http.Client{Transport: tr}
+	// Add a timeout to prevent hanging requests
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   10 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

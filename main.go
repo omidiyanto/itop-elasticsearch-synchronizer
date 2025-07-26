@@ -43,6 +43,7 @@ type ESTicket struct {
 	TeamID                            string     `json:"team_id"`
 	Team                              string     `json:"team_id_friendlyname"`
 	Caller                            string     `json:"caller_id_friendlyname"`
+	CallerTeam                        string     `json:"caller_team"` // Team(s) of the caller, comma-separated if multiple teams
 	Origin                            string     `json:"origin"`
 	StartDate                         *time.Time `json:"start_date,omitempty"`
 	AssignmentDate                    *time.Time `json:"assignment_date,omitempty"`
@@ -77,14 +78,17 @@ func main() {
 		log.Fatal("Missing ELASTIC_URL or ELASTIC_INDEX env var")
 	}
 
+	// Debug mode
+	debug := os.Getenv("DEBUG") == "true"
+
 	// Sync holidays from iTop to file in background (periodic, setiap 10 detik)
 	go itop.SyncHolidaysToFile("holidays.txt", 10*time.Second)
 
-	go syncLoop(esConf)
+	go syncLoop(esConf, debug)
 	select {} // block forever
 }
 
-func syncLoop(esConf ESConfig) {
+func syncLoop(esConf ESConfig, debug bool) {
 	interval := 3 * time.Second
 	if s := os.Getenv("SYNC_INTERVAL"); s != "" {
 		if d, err := time.ParseDuration(s); err == nil {
@@ -136,7 +140,7 @@ func syncLoop(esConf ESConfig) {
 		// Sync tickets
 		for _, t := range allTickets {
 			key := hashTicketKey(t.ID, t.Ref, t.Class)
-			est := mapTicketToES(t, holidayMap)
+			est := mapTicketToES(t, holidayMap, debug)
 			// Compare, if not exist or different, upsert
 			if old, ok := esTicketMap[key]; !ok || !compareESTicket(est, old) {
 				upsertESTicket(esConf, est)
@@ -159,7 +163,7 @@ func hashTicketKey(id, ref, class string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
+func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTicket {
 	workStart := os.Getenv("WORK_START")
 	workEnd := os.Getenv("WORK_END")
 	if workStart == "" {
@@ -176,6 +180,18 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 	// 24-hour business hour calculation (00:00-23:59)
 	ttr24BH := utils.CalculateBusinessHourDuration(t.StartDate, t.ResolutionDate, "00:00", "23:59", holidays)
 	tto24BH := utils.CalculateBusinessHourDuration(t.StartDate, t.AssignmentDate, "00:00", "23:59", holidays)
+
+	// Fetch caller team information
+	callerTeam := "-"
+	if t.Caller != "" {
+		var err error
+		callerTeam, err = itop.FetchPersonTeams(t.Caller)
+		if err != nil {
+			log.Printf("Error fetching teams for caller %s: %v", t.Caller, err)
+		} else if callerTeam != "-" && debug {
+			log.Printf("Found teams for caller %s: %s", t.Caller, callerTeam)
+		}
+	}
 
 	// Ambil SLT dari iTop (cache)
 	slt, _ := itop.GetSLTDeadlineCached(t.Class, t.Priority, t.Service)
@@ -291,6 +307,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}) ESTicket {
 		TeamID:                            t.TeamID,
 		Team:                              t.Team,
 		Caller:                            t.Caller,
+		CallerTeam:                        callerTeam,
 		Origin:                            t.Origin,
 		StartDate:                         startDatePtr,
 		AssignmentDate:                    assignmentDatePtr,
