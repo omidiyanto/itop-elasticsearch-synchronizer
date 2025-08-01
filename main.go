@@ -269,24 +269,24 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 
 	tz := os.Getenv("TIMEZONE")
 	if tz == "" {
-		tz = "UTC"
+		tz = "Asia/Jakarta"
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		loc = time.UTC
+		loc = time.Local
 	}
 
 	var startDatePtr, assignmentDatePtr, resolutionDatePtr *time.Time
 	if !t.StartDate.IsZero() {
-		v := t.StartDate.In(loc)
+		v := t.StartDate.In(loc).Add(-7 * time.Hour)
 		startDatePtr = &v
 	}
 	if !t.AssignmentDate.IsZero() {
-		v := t.AssignmentDate.In(loc)
+		v := t.AssignmentDate.In(loc).Add(-7 * time.Hour)
 		assignmentDatePtr = &v
 	}
 	if !t.ResolutionDate.IsZero() {
-		v := t.ResolutionDate.In(loc)
+		v := t.ResolutionDate.In(loc).Add(-7 * time.Hour)
 		resolutionDatePtr = &v
 	}
 
