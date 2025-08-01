@@ -273,7 +273,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		loc = time.Local
+		loc = time.UTC
 	}
 
 	var startDatePtr, assignmentDatePtr, resolutionDatePtr *time.Time
