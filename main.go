@@ -184,12 +184,17 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	// Fetch caller team information
 	callerTeam := "-"
 	if t.Caller != "" {
-		var err error
-		callerTeam, err = itop.FetchPersonTeams(t.Caller)
+		teams, err := itop.FetchPersonTeams(t.Caller)
 		if err != nil {
 			log.Printf("Error fetching teams for caller %s: %v", t.Caller, err)
-		} else if callerTeam != "-" && debug {
-			log.Printf("Found teams for caller %s: %s", t.Caller, callerTeam)
+			callerTeam = "-"
+		} else if teams != "" && teams != "-" {
+			callerTeam = teams
+			if debug {
+				log.Printf("Found teams for caller %s: %s", t.Caller, callerTeam)
+			}
+		} else {
+			callerTeam = "-"
 		}
 	}
 
