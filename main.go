@@ -63,6 +63,8 @@ type ESTicket struct {
 	TimeToResolve24BH         float64 `json:"time_to_resolve_24bh"`
 	SLAComplianceResponse24BH string  `json:"sla_compliance_response_24bh"`
 	SLAComplianceResolve24BH  string  `json:"sla_compliance_resolve_24bh"`
+
+	PendingMoreThanTwoDay string `json:"pending_more_than_two_day"`
 }
 
 func main() {
@@ -305,6 +307,18 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		lastUpdatePtr = &v
 	}
 
+	var pendingMoreThanTwoDay string
+	if t.Status == "pending" && lastPendingDatePtr != nil {
+		now := time.Now().UTC()
+		diff := now.Sub(*lastPendingDatePtr)
+		if diff > 48*time.Hour {
+			pendingMoreThanTwoDay = "true"
+		} else {
+			pendingMoreThanTwoDay = "false"
+		}
+	} else {
+		pendingMoreThanTwoDay = ""
+	}
 	return ESTicket{
 		ID:                                t.ID,
 		Ref:                               t.Ref,
@@ -341,6 +355,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		TimeToResolve24BH:                 ttr24BH.Seconds(),
 		SLAComplianceResponse24BH:         slaComplianceResponse24BH,
 		SLAComplianceResolve24BH:          slaComplianceResolve24BH,
+		PendingMoreThanTwoDay:             pendingMoreThanTwoDay,
 	}
 }
 
