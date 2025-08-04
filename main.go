@@ -63,8 +63,6 @@ type ESTicket struct {
 	TimeToResolve24BH         float64 `json:"time_to_resolve_24bh"`
 	SLAComplianceResponse24BH string  `json:"sla_compliance_response_24bh"`
 	SLAComplianceResolve24BH  string  `json:"sla_compliance_resolve_24bh"`
-
-	PendingMoreThanTwoDay string `json:"pending_more_than_two_day"`
 }
 
 func main() {
@@ -205,77 +203,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	// Ambil SLT dari iTop (cache)
 	slt, _ := itop.GetSLTDeadlineCached(t.Class, t.Priority, t.Service)
 
-	// Compliance logic (RAW)
-	var slaComplianceResponseRaw, slaComplianceResolveRaw string
-	if slt.TTO > 0 && ttoRaw > 0 {
-		if ttoRaw <= slt.TTO.Seconds() {
-			slaComplianceResponseRaw = "comply"
-		} else {
-			slaComplianceResponseRaw = "overdue"
-		}
-	} else {
-		slaComplianceResponseRaw = ""
-	}
-	if slt.TTR > 0 && ttrRaw > 0 {
-		if ttrRaw <= slt.TTR.Seconds() {
-			slaComplianceResolveRaw = "comply"
-		} else {
-			slaComplianceResolveRaw = "overdue"
-		}
-	} else {
-		slaComplianceResolveRaw = ""
-	}
-
-	// Compliance logic (Business Hour)
-	var slaComplianceResponseBH, slaComplianceResolveBH string
-	if slt.TTO > 0 {
-		if (ttoBH > 0 && ttoBH.Seconds() <= slt.TTO.Seconds()) || (ttoBH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
-			slaComplianceResponseBH = "comply"
-		} else if ttoBH.Seconds() > 0 {
-			slaComplianceResponseBH = "overdue"
-		} else {
-			slaComplianceResponseBH = ""
-		}
-	} else {
-		slaComplianceResponseBH = ""
-	}
-	if slt.TTR > 0 {
-		if (ttrBH > 0 && ttrBH.Seconds() <= slt.TTR.Seconds()) || (ttrBH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
-			slaComplianceResolveBH = "comply"
-		} else if ttrBH.Seconds() > 0 {
-			slaComplianceResolveBH = "overdue"
-		} else {
-			slaComplianceResolveBH = ""
-		}
-	} else {
-		slaComplianceResolveBH = ""
-	}
-
-	// Compliance logic (24-hour business hour)
-	var slaComplianceResponse24BH, slaComplianceResolve24BH string
-	if slt.TTO > 0 {
-		if (tto24BH > 0 && tto24BH.Seconds() <= slt.TTO.Seconds()) || (tto24BH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
-			slaComplianceResponse24BH = "comply"
-		} else if tto24BH.Seconds() > 0 {
-			slaComplianceResponse24BH = "overdue"
-		} else {
-			slaComplianceResponse24BH = ""
-		}
-	} else {
-		slaComplianceResponse24BH = ""
-	}
-	if slt.TTR > 0 {
-		if (ttr24BH > 0 && ttr24BH.Seconds() <= slt.TTR.Seconds()) || (ttr24BH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
-			slaComplianceResolve24BH = "comply"
-		} else if ttr24BH.Seconds() > 0 {
-			slaComplianceResolve24BH = "overdue"
-		} else {
-			slaComplianceResolve24BH = ""
-		}
-	} else {
-		slaComplianceResolve24BH = ""
-	}
-
+	// Timezone
 	tz := os.Getenv("TIMEZONE")
 	if tz == "" {
 		tz = "Asia/Jakarta"
@@ -301,24 +229,112 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	if t.LastPendingDate != nil && !t.LastPendingDate.IsZero() {
 		v := t.LastPendingDate.In(loc).Add(-7 * time.Hour)
 		lastPendingDatePtr = &v
+	} else {
+		lastPendingDatePtr = nil
 	}
 	if t.LastUpdate != nil && !t.LastUpdate.IsZero() {
 		v := t.LastUpdate.In(loc).Add(-7 * time.Hour)
 		lastUpdatePtr = &v
 	}
 
-	var pendingMoreThanTwoDay string
+	// Compliance logic (RAW)
+	var slaComplianceResponseRaw, slaComplianceResolveRaw string
+	if slt.TTO > 0 && ttoRaw > 0 {
+		if ttoRaw <= slt.TTO.Seconds() {
+			slaComplianceResponseRaw = "comply"
+		} else {
+			slaComplianceResponseRaw = "overdue"
+		}
+	} else {
+		slaComplianceResponseRaw = ""
+	}
+	// Overdue logic for pending status
 	if t.Status == "pending" && lastPendingDatePtr != nil {
 		now := time.Now().UTC()
 		diff := now.Sub(*lastPendingDatePtr)
 		if diff > 48*time.Hour {
-			pendingMoreThanTwoDay = "true"
+			slaComplianceResolveRaw = "overdue"
 		} else {
-			pendingMoreThanTwoDay = "false"
+			slaComplianceResolveRaw = "comply"
+		}
+	} else if slt.TTR > 0 && ttrRaw > 0 {
+		if ttrRaw <= slt.TTR.Seconds() {
+			slaComplianceResolveRaw = "comply"
+		} else {
+			slaComplianceResolveRaw = "overdue"
 		}
 	} else {
-		pendingMoreThanTwoDay = ""
+		slaComplianceResolveRaw = ""
 	}
+
+	// Compliance logic (Business Hour)
+	var slaComplianceResponseBH, slaComplianceResolveBH string
+	if slt.TTO > 0 {
+		if (ttoBH > 0 && ttoBH.Seconds() <= slt.TTO.Seconds()) || (ttoBH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
+			slaComplianceResponseBH = "comply"
+		} else if ttoBH.Seconds() > 0 {
+			slaComplianceResponseBH = "overdue"
+		} else {
+			slaComplianceResponseBH = ""
+		}
+	} else {
+		slaComplianceResponseBH = ""
+	}
+	// Overdue logic for pending status (business hour)
+	if t.Status == "pending" && lastPendingDatePtr != nil {
+		now := time.Now().UTC()
+		diff := now.Sub(*lastPendingDatePtr)
+		if diff > 48*time.Hour {
+			slaComplianceResolveBH = "overdue"
+		} else {
+			slaComplianceResolveBH = "comply"
+		}
+	} else if slt.TTR > 0 {
+		if (ttrBH > 0 && ttrBH.Seconds() <= slt.TTR.Seconds()) || (ttrBH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
+			slaComplianceResolveBH = "comply"
+		} else if ttrBH.Seconds() > 0 {
+			slaComplianceResolveBH = "overdue"
+		} else {
+			slaComplianceResolveBH = ""
+		}
+	} else {
+		slaComplianceResolveBH = ""
+	}
+
+	// Compliance logic (24-hour business hour)
+	var slaComplianceResponse24BH, slaComplianceResolve24BH string
+	if slt.TTO > 0 {
+		if (tto24BH > 0 && tto24BH.Seconds() <= slt.TTO.Seconds()) || (tto24BH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
+			slaComplianceResponse24BH = "comply"
+		} else if tto24BH.Seconds() > 0 {
+			slaComplianceResponse24BH = "overdue"
+		} else {
+			slaComplianceResponse24BH = ""
+		}
+	} else {
+		slaComplianceResponse24BH = ""
+	}
+	// Overdue logic for pending status (24bh)
+	if t.Status == "pending" && lastPendingDatePtr != nil {
+		now := time.Now().UTC()
+		diff := now.Sub(*lastPendingDatePtr)
+		if diff > 48*time.Hour {
+			slaComplianceResolve24BH = "overdue"
+		} else {
+			slaComplianceResolve24BH = "comply"
+		}
+	} else if slt.TTR > 0 {
+		if (ttr24BH > 0 && ttr24BH.Seconds() <= slt.TTR.Seconds()) || (ttr24BH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
+			slaComplianceResolve24BH = "comply"
+		} else if ttr24BH.Seconds() > 0 {
+			slaComplianceResolve24BH = "overdue"
+		} else {
+			slaComplianceResolve24BH = ""
+		}
+	} else {
+		slaComplianceResolve24BH = ""
+	}
+
 	return ESTicket{
 		ID:                                t.ID,
 		Ref:                               t.Ref,
@@ -355,7 +371,6 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		TimeToResolve24BH:                 ttr24BH.Seconds(),
 		SLAComplianceResponse24BH:         slaComplianceResponse24BH,
 		SLAComplianceResolve24BH:          slaComplianceResolve24BH,
-		PendingMoreThanTwoDay:             pendingMoreThanTwoDay,
 	}
 }
 
