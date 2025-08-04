@@ -255,7 +255,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		if diff > 48*time.Hour {
 			slaComplianceResolveRaw = "overdue"
 		} else {
-			slaComplianceResolveRaw = "comply"
+			slaComplianceResolveRaw = ""
 		}
 	} else if slt.TTR > 0 && ttrRaw > 0 {
 		if ttrRaw <= slt.TTR.Seconds() {
@@ -287,7 +287,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		if diff > 48*time.Hour {
 			slaComplianceResolveBH = "overdue"
 		} else {
-			slaComplianceResolveBH = "comply"
+			slaComplianceResolveBH = ""
 		}
 	} else if slt.TTR > 0 {
 		if (ttrBH > 0 && ttrBH.Seconds() <= slt.TTR.Seconds()) || (ttrBH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
@@ -321,7 +321,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		if diff > 48*time.Hour {
 			slaComplianceResolve24BH = "overdue"
 		} else {
-			slaComplianceResolve24BH = "comply"
+			slaComplianceResolve24BH = ""
 		}
 	} else if slt.TTR > 0 {
 		if (ttr24BH > 0 && ttr24BH.Seconds() <= slt.TTR.Seconds()) || (ttr24BH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
