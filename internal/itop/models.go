@@ -30,7 +30,9 @@ type Ticket struct {
 	ServiceID          string
 	AgentID            string
 	TeamID             string
-	TicketType         string // for future multi-class
-	Caller             string // caller_id_friendlyname
-	Origin             string // origin
+	TicketType         string     // for future multi-class
+	LastPendingDate    *time.Time // last_pending_date dari iTop, bisa kosong
+	LastUpdate         *time.Time // last_update dari iTop, bisa kosong
+	Caller             string     // caller_id_friendlyname
+	Origin             string     // origin
 }

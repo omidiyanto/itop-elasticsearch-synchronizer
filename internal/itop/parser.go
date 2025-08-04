@@ -58,6 +58,8 @@ type TicketResponse struct {
 			Caller                 string `json:"caller_id_friendlyname"`
 			Origin                 string `json:"origin"`
 			StartDate              string `json:"start_date"`
+			LastPendingDate        string `json:"last_pending_date"`
+			LastUpdate             string `json:"last_update"`
 			AssignmentDate         string `json:"assignment_date"`
 			ResolutionDate         string `json:"resolution_date"`
 			TTODeadline            string `json:"tto_deadline"`
@@ -81,6 +83,8 @@ func ParseTickets(data []byte) ([]Ticket, error) {
 		resolutionDate, _ := parseDateFlexible(fields.ResolutionDate)
 		ttoDeadline, _ := parseDateFlexible(fields.TTODeadline)
 		ttrDeadline, _ := parseDateFlexible(fields.TTRDeadline)
+		lastPendingDate, _ := parseDateFlexible(fields.LastPendingDate)
+		lastUpdate, _ := parseDateFlexible(fields.LastUpdate)
 
 		ticket := Ticket{
 			ID:                 fields.ID,
@@ -107,6 +111,14 @@ func ParseTickets(data []byte) ([]Ticket, error) {
 			ServiceID:          fields.ServiceID,
 			Caller:             fields.Caller,
 			Origin:             fields.Origin,
+			LastPendingDate:    nil,
+			LastUpdate:         nil,
+		}
+		if !lastPendingDate.IsZero() {
+			ticket.LastPendingDate = &lastPendingDate
+		}
+		if !lastUpdate.IsZero() {
+			ticket.LastUpdate = &lastUpdate
 		}
 		// Calculate TTO/TTR
 		if !assignmentDate.IsZero() && !startDate.IsZero() {

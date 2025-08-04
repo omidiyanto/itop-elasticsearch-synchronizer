@@ -48,6 +48,8 @@ type ESTicket struct {
 	StartDate                         *time.Time `json:"start_date,omitempty"`
 	AssignmentDate                    *time.Time `json:"assignment_date,omitempty"`
 	ResolutionDate                    *time.Time `json:"resolution_date,omitempty"`
+	LastPendingDate                   *time.Time `json:"last_pending_date,omitempty"`
+	LastUpdate                        *time.Time `json:"last_update,omitempty"`
 	TimeToResponseRaw                 float64    `json:"time_to_response_raw"`
 	TimeToResolveRaw                  float64    `json:"time_to_resolve_raw"`
 	SLAComplianceResponseRaw          string     `json:"sla_compliance_response_raw"`
@@ -281,7 +283,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		loc = time.Local
 	}
 
-	var startDatePtr, assignmentDatePtr, resolutionDatePtr *time.Time
+	var startDatePtr, assignmentDatePtr, resolutionDatePtr, lastPendingDatePtr, lastUpdatePtr *time.Time
 	if !t.StartDate.IsZero() {
 		v := t.StartDate.In(loc).Add(-7 * time.Hour)
 		startDatePtr = &v
@@ -293,6 +295,14 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	if !t.ResolutionDate.IsZero() {
 		v := t.ResolutionDate.In(loc).Add(-7 * time.Hour)
 		resolutionDatePtr = &v
+	}
+	if t.LastPendingDate != nil && !t.LastPendingDate.IsZero() {
+		v := t.LastPendingDate.In(loc).Add(-7 * time.Hour)
+		lastPendingDatePtr = &v
+	}
+	if t.LastUpdate != nil && !t.LastUpdate.IsZero() {
+		v := t.LastUpdate.In(loc).Add(-7 * time.Hour)
+		lastUpdatePtr = &v
 	}
 
 	return ESTicket{
@@ -317,6 +327,8 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 		StartDate:                         startDatePtr,
 		AssignmentDate:                    assignmentDatePtr,
 		ResolutionDate:                    resolutionDatePtr,
+		LastPendingDate:                   lastPendingDatePtr,
+		LastUpdate:                        lastUpdatePtr,
 		TimeToResponseRaw:                 ttoRaw,
 		TimeToResolveRaw:                  ttrRaw,
 		SLAComplianceResponseRaw:          slaComplianceResponseRaw,
