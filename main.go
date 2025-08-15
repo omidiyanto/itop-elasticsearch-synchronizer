@@ -239,6 +239,8 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 
 	// Compliance logic (RAW)
 	var slaComplianceResponseRaw, slaComplianceResolveRaw string
+	now := time.Now().UTC()
+	// Response compliance (TTO)
 	if slt.TTO > 0 && ttoRaw > 0 {
 		if ttoRaw <= slt.TTO.Seconds() {
 			slaComplianceResponseRaw = "comply"
@@ -248,20 +250,35 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	} else {
 		slaComplianceResponseRaw = ""
 	}
-	// Overdue logic for pending status
+	// Resolve compliance (TTR)
 	if t.Status == "pending" && lastPendingDatePtr != nil {
-		now := time.Now().UTC()
 		diff := now.Sub(*lastPendingDatePtr)
 		if diff > 48*time.Hour {
 			slaComplianceResolveRaw = "overdue"
 		} else {
 			slaComplianceResolveRaw = ""
 		}
-	} else if slt.TTR > 0 && ttrRaw > 0 {
-		if ttrRaw <= slt.TTR.Seconds() {
-			slaComplianceResolveRaw = "comply"
+	} else if t.Status == "resolved" || t.Status == "closed" {
+		if slt.TTR > 0 && ttrRaw > 0 {
+			if ttrRaw <= slt.TTR.Seconds() {
+				slaComplianceResolveRaw = "comply"
+			} else {
+				slaComplianceResolveRaw = "overdue"
+			}
 		} else {
-			slaComplianceResolveRaw = "overdue"
+			slaComplianceResolveRaw = ""
+		}
+	} else if t.Status != "pending" && t.Status != "resolved" && t.Status != "closed" {
+		// In progress (e.g. new, assigned, etc): overdue if now > SLT deadline
+		if slt.TTR > 0 && t.StartDate != (time.Time{}) {
+			deadline := t.StartDate.Add(slt.TTR)
+			if now.After(deadline) {
+				slaComplianceResolveRaw = "overdue"
+			} else {
+				slaComplianceResolveRaw = ""
+			}
+		} else {
+			slaComplianceResolveRaw = ""
 		}
 	} else {
 		slaComplianceResolveRaw = ""
@@ -269,6 +286,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 
 	// Compliance logic (Business Hour)
 	var slaComplianceResponseBH, slaComplianceResolveBH string
+	// Response compliance (TTO)
 	if slt.TTO > 0 {
 		if (ttoBH > 0 && ttoBH.Seconds() <= slt.TTO.Seconds()) || (ttoBH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
 			slaComplianceResponseBH = "comply"
@@ -280,20 +298,35 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	} else {
 		slaComplianceResponseBH = ""
 	}
-	// Overdue logic for pending status (business hour)
+	// Resolve compliance (TTR)
 	if t.Status == "pending" && lastPendingDatePtr != nil {
-		now := time.Now().UTC()
 		diff := now.Sub(*lastPendingDatePtr)
 		if diff > 48*time.Hour {
 			slaComplianceResolveBH = "overdue"
 		} else {
 			slaComplianceResolveBH = ""
 		}
-	} else if slt.TTR > 0 {
-		if (ttrBH > 0 && ttrBH.Seconds() <= slt.TTR.Seconds()) || (ttrBH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
-			slaComplianceResolveBH = "comply"
-		} else if ttrBH.Seconds() > 0 {
-			slaComplianceResolveBH = "overdue"
+	} else if t.Status == "resolved" || t.Status == "closed" {
+		if slt.TTR > 0 {
+			if (ttrBH > 0 && ttrBH.Seconds() <= slt.TTR.Seconds()) || (ttrBH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
+				slaComplianceResolveBH = "comply"
+			} else if ttrBH.Seconds() > 0 {
+				slaComplianceResolveBH = "overdue"
+			} else {
+				slaComplianceResolveBH = ""
+			}
+		} else {
+			slaComplianceResolveBH = ""
+		}
+	} else if t.Status != "pending" && t.Status != "resolved" && t.Status != "closed" {
+		// In progress (e.g. new, assigned, etc): overdue if now > SLT deadline
+		if slt.TTR > 0 && t.StartDate != (time.Time{}) {
+			deadline := t.StartDate.Add(slt.TTR)
+			if now.After(deadline) {
+				slaComplianceResolveBH = "overdue"
+			} else {
+				slaComplianceResolveBH = ""
+			}
 		} else {
 			slaComplianceResolveBH = ""
 		}
@@ -303,6 +336,7 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 
 	// Compliance logic (24-hour business hour)
 	var slaComplianceResponse24BH, slaComplianceResolve24BH string
+	// Response compliance (TTO)
 	if slt.TTO > 0 {
 		if (tto24BH > 0 && tto24BH.Seconds() <= slt.TTO.Seconds()) || (tto24BH.Seconds() == 0 && ttoRaw > 0 && ttoRaw <= slt.TTO.Seconds()) {
 			slaComplianceResponse24BH = "comply"
@@ -314,20 +348,35 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	} else {
 		slaComplianceResponse24BH = ""
 	}
-	// Overdue logic for pending status (24bh)
+	// Resolve compliance (TTR)
 	if t.Status == "pending" && lastPendingDatePtr != nil {
-		now := time.Now().UTC()
 		diff := now.Sub(*lastPendingDatePtr)
 		if diff > 48*time.Hour {
 			slaComplianceResolve24BH = "overdue"
 		} else {
 			slaComplianceResolve24BH = ""
 		}
-	} else if slt.TTR > 0 {
-		if (ttr24BH > 0 && ttr24BH.Seconds() <= slt.TTR.Seconds()) || (ttr24BH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
-			slaComplianceResolve24BH = "comply"
-		} else if ttr24BH.Seconds() > 0 {
-			slaComplianceResolve24BH = "overdue"
+	} else if t.Status == "resolved" || t.Status == "closed" {
+		if slt.TTR > 0 {
+			if (ttr24BH > 0 && ttr24BH.Seconds() <= slt.TTR.Seconds()) || (ttr24BH.Seconds() == 0 && ttrRaw > 0 && ttrRaw <= slt.TTR.Seconds()) {
+				slaComplianceResolve24BH = "comply"
+			} else if ttr24BH.Seconds() > 0 {
+				slaComplianceResolve24BH = "overdue"
+			} else {
+				slaComplianceResolve24BH = ""
+			}
+		} else {
+			slaComplianceResolve24BH = ""
+		}
+	} else if t.Status != "pending" && t.Status != "resolved" && t.Status != "closed" {
+		// In progress (e.g. new, assigned, etc): overdue if now > SLT deadline
+		if slt.TTR > 0 && t.StartDate != (time.Time{}) {
+			deadline := t.StartDate.Add(slt.TTR)
+			if now.After(deadline) {
+				slaComplianceResolve24BH = "overdue"
+			} else {
+				slaComplianceResolve24BH = ""
+			}
 		} else {
 			slaComplianceResolve24BH = ""
 		}
