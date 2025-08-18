@@ -300,8 +300,9 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	}
 	// Resolve compliance (TTR)
 	if t.Status == "pending" && lastPendingDatePtr != nil {
-		diff := now.Sub(*lastPendingDatePtr)
-		if diff > 48*time.Hour {
+		// Calculate business hours between lastPendingDate and now
+		bhPending := utils.CalculateBusinessHourDuration(*lastPendingDatePtr, now, workStart, workEnd, holidays)
+		if bhPending.Hours() > 48 {
 			slaComplianceResolveBH = "overdue"
 		} else {
 			slaComplianceResolveBH = ""
@@ -319,10 +320,10 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 			slaComplianceResolveBH = ""
 		}
 	} else if t.Status != "pending" && t.Status != "resolved" && t.Status != "closed" {
-		// In progress (e.g. new, assigned, etc): overdue if now > SLT deadline
+		// In progress (e.g. new, assigned, etc): overdue if business hour since start > SLT
 		if slt.TTR > 0 && t.StartDate != (time.Time{}) {
-			deadline := t.StartDate.Add(slt.TTR)
-			if now.After(deadline) {
+			bhInProgress := utils.CalculateBusinessHourDuration(t.StartDate, now, workStart, workEnd, holidays)
+			if bhInProgress.Seconds() > slt.TTR.Seconds() {
 				slaComplianceResolveBH = "overdue"
 			} else {
 				slaComplianceResolveBH = ""
@@ -350,8 +351,9 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 	}
 	// Resolve compliance (TTR)
 	if t.Status == "pending" && lastPendingDatePtr != nil {
-		diff := now.Sub(*lastPendingDatePtr)
-		if diff > 48*time.Hour {
+		// Calculate 24-hour business hours between lastPendingDate and now
+		bh24Pending := utils.CalculateBusinessHourDuration(*lastPendingDatePtr, now, "00:00", "23:59", holidays)
+		if bh24Pending.Hours() > 48 {
 			slaComplianceResolve24BH = "overdue"
 		} else {
 			slaComplianceResolve24BH = ""
@@ -369,10 +371,10 @@ func mapTicketToES(t itop.Ticket, holidays map[string]struct{}, debug bool) ESTi
 			slaComplianceResolve24BH = ""
 		}
 	} else if t.Status != "pending" && t.Status != "resolved" && t.Status != "closed" {
-		// In progress (e.g. new, assigned, etc): overdue if now > SLT deadline
+		// In progress (e.g. new, assigned, etc): overdue if 24bh since start > SLT
 		if slt.TTR > 0 && t.StartDate != (time.Time{}) {
-			deadline := t.StartDate.Add(slt.TTR)
-			if now.After(deadline) {
+			bh24InProgress := utils.CalculateBusinessHourDuration(t.StartDate, now, "00:00", "23:59", holidays)
+			if bh24InProgress.Seconds() > slt.TTR.Seconds() {
 				slaComplianceResolve24BH = "overdue"
 			} else {
 				slaComplianceResolve24BH = ""
